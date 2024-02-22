@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP, KindSignatures, PolyKinds, MultiParamTypeClasses, FunctionalDependencies, ConstraintKinds, NoImplicitPrelude, TypeFamilies, TypeOperators, FlexibleContexts, FlexibleInstances, UndecidableInstances, RankNTypes, GADTs, ScopedTypeVariables, DataKinds, DefaultSignatures, NoMonomorphismRestriction #-}
-
 module Hask.Category
   (
   -- * Category
@@ -341,3 +340,220 @@ instance FunctorOf (->) (Nat (->) (->)) p => Functor (Fix p) where
   type Dom (Fix p) = (->)
   type Cod (Fix p) = (->)
   fmap f (In b) = In (bimap (fmap f) f b)
+
+--------------------------------------------------------------------------------
+-- Initital object  
+-- In category theory, a branch of mathematics, an initial object of a category C 
+-- is an object I in C such that for every object X in C, there exists precisely 
+-- one morphism I → X.
+
+-- Terminal object
+-- T is terminal if for every object X in C there exists exactly one morphism X → T. 
+--------------------------------------------------------------------------------
+
+--InitialObject
+data InitialObject a where
+  InitialMorphism :: Ob p a => InitialObject a
+
+instance Functor InitialObject where
+  type Dom InitialObject = p
+  type Cod InitialObject = (:-)
+  fmap _ = Sub Dict
+
+instance Category' InitialObject where
+  type Ob InitialObject = Vacuous InitialObject
+  id = InitialMorphism
+  observe _ = Dict
+  (.) _ _ = InitialMorphism
+  unop = getOp
+
+--TerminalObject
+data TerminalObject a where
+  TerminalMorphism :: Ob p a => TerminalObject a
+
+instance Functor TerminalObject where
+  type Dom TerminalObject = p
+  type Cod TerminalObject = (:-)
+  fmap _ = Sub Dict
+
+instance Category' TerminalObject where
+  type Ob TerminalObject = Vacuous TerminalObject
+  id = TerminalMorphism
+  observe _ = Dict
+  (.) _ _ = TerminalMorphism
+  unop = getOp
+
+
+
+-- Example usage
+demoInitTerm :: IO ()
+demoInitTerm = do
+  let initialObjectInstance :: InitialObject Int
+      initialObjectInstance = InitialMorphism
+
+  -- Use the initial object
+  case observe initialObjectInstance of
+    Dict -> putStrLn "Initial object is observed in the category"
+
+  let terminalObjectInstance :: TerminalObject Int
+      terminalObjectInstance = TerminalMorphism
+   -- Use the terminal object
+  case observe terminalObjectInstance of
+    Dict -> putStrLn "Terminal object is observed in the category"
+
+
+--------------------------------------------------------------------------------
+-- * Example: In the category Rel of sets and relations, the empty set is the 
+--   unique initial object, the unique terminal object, (and hence the unique 
+--   zero object.)
+--------------------------------------------------------------------------------
+
+-- Example usage in the category of sets and relations (Rel)
+type Set = [Int]  -- Simplified representation of sets
+
+instance Ob InitialObject Set
+instance Ob TerminalObject Set
+
+-- Example usage
+demoRel :: IO ()
+demoRel = do
+  let initialObjectInstance :: InitialObject Set
+      initialObjectInstance = InitialMorphism
+
+      terminalObjectInstance :: TerminalObject Set
+      terminalObjectInstance = TerminalMorphism
+
+  putStrLn "Initial Object:"
+  case observe initialObjectInstance of
+    Dict -> putStrLn "Empty set is the unique initial object."
+
+  putStrLn "\nTerminal Object:"
+  case observe terminalObjectInstance of
+    Dict -> putStrLn "Empty set is the unique terminal object."
+
+--------------------------------------------------------------------------------
+-- Any partially ordered set (P, ≤) can be interpreted as a category: 
+-- the objects are the elements of P, and there is a single morphism from x to y 
+-- if and only if x ≤ y. This category has an initial object if and only if 
+-- P has a least element; it has a terminal object if and only if P has a greatest element.
+--------------------------------------------------------------------------------
+
+-- Example usage in the category of partially ordered sets (Poset)
+type PosetElement = Int  -- Simplified representation of elements in the poset
+
+instance Ob InitialObject PosetElement
+instance Ob TerminalObject PosetElement
+
+-- Function to demonstrate the uniqueness of initial and terminal objects in a poset
+demoPoset :: IO ()
+demoPoset = do
+  let initialObjectInstance :: InitialObject PosetElement
+      initialObjectInstance = InitialMorphism
+
+      terminalObjectInstance :: TerminalObject PosetElement
+      terminalObjectInstance = TerminalMorphism
+
+  putStrLn "Initial Object (Least Element):"
+  case observe initialObjectInstance of
+    Dict -> putStrLn "The initial object corresponds to the least element in the poset."
+
+  putStrLn "\nTerminal Object (Greatest Element):"
+  case observe terminalObjectInstance of
+    Dict -> putStrLn "The terminal object corresponds to the greatest element in the poset."
+
+
+--------------------------------------------------------------------------------
+-- In Ring, the category of rings with unity and unity-preserving morphisms,
+-- the ring of integers Z is an initial object. The zero ring consisting only 
+-- of a single element 0 = 1 is a terminal object.
+--------------------------------------------------------------------------------
+
+-- Example usage in the category of rings with unity and unity-preserving morphisms
+type RingElement = Int  -- Simplified representation of ring elements
+
+-- Ring data type with unity
+data Ring a = Ring { unity :: a, addition :: a -> a -> a, multiplication :: a -> a -> a }
+
+instance Ob InitialObject (Ring RingElement)
+instance Ob TerminalObject (Ring RingElement)
+
+-- Function to demonstrate the uniqueness of initial and terminal objects in the category of rings
+demoRings :: IO ()
+demoRings = do
+  let initialObjectInstance :: InitialObject (Ring RingElement)
+      initialObjectInstance = InitialMorphism
+
+      terminalObjectInstance :: TerminalObject (Ring RingElement)
+      terminalObjectInstance = TerminalMorphism
+
+  putStrLn "Initial Object (Ring of Integers Z):"
+  case observe initialObjectInstance of
+    Dict -> putStrLn "The initial object corresponds to the ring of integers Z."
+
+  putStrLn "\nTerminal Object (Zero Ring):"
+  case observe terminalObjectInstance of
+    Dict -> putStrLn "The terminal object corresponds to the zero ring."
+
+--------------------------------------------------------------------------------
+-- * Sum & Product
+--------------------------------------------------------------------------------
+
+-- Define a data type representing the sum object
+data SumObject a b where
+  Inl :: Ob p a => SumObject a b
+  Inr :: Ob p b => SumObject a b
+
+instance Functor (SumObject a) where
+  type Dom (SumObject a) = p
+  type Cod (SumObject a) = (:-)
+  fmap _ = Sub Dict
+
+instance Category' (SumObject a) where
+  type Ob (SumObject a) = Vacuous (SumObject a)
+  id = Inl
+  observe _ = Dict
+  (.) Inl _ = Inl
+  (.) Inr _ = Inr
+  (.) _ _ = Inl  -- Composition with Inr is not defined
+
+-- Define a data type representing the product object
+data ProductObject a b where
+  Pair :: (Ob p a, Ob p b) => ProductObject a b
+
+instance Functor (ProductObject a) where
+  type Dom (ProductObject a) = p
+  type Cod (ProductObject a) = (:-)
+  fmap _ = Sub Dict
+
+instance Category' (ProductObject a) where
+  type Ob (ProductObject a) = Vacuous (ProductObject a)
+  id = Pair
+  observe _ = Dict
+  (.) Pair _ = Pair
+
+
+-- Example usage in the category of types and functions
+type TypeObject = TypeRep  -- Simplified representation of types
+
+-- Sum types
+data EitherObj a b where
+  LeftObj :: TypeObject a => EitherObj a b
+  RightObj :: TypeObject b => EitherObj a b
+
+-- Product types
+data PairObj a b where
+  PairObj :: (TypeObject a, TypeObject b) => PairObj a b
+
+-- Function to demonstrate sums and products in the category of types and functions
+demoSP :: IO ()
+demoSP = do
+  putStrLn "Sum Object (Either):"
+  case observe (Inl :: SumObject (EitherObj Int Bool) (EitherObj Char Double)) of
+    Dict -> putStrLn "Inl corresponds to LeftObj."
+
+  case observe (Inr :: SumObject (EitherObj Int Bool) (EitherObj Char Double)) of
+    Dict -> putStrLn "Inr corresponds to RightObj."
+
+  putStrLn "\nProduct Object (Pair):"
+  case observe (Pair :: ProductObject (PairObj Int Char) (PairObj Bool Double)) of
+    Dict -> putStrLn "Pair corresponds to PairObj."
