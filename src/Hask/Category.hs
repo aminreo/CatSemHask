@@ -40,6 +40,11 @@ import Prelude (($), Either(..))
 import Data.Type.Equality
 import Data.Type.Bool 
 import Data.Void (Void, absurd)
+import Prelude (const)
+import Prelude (undefined)
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Constraint (Dict(..), (:-)(Sub))
 
 --------------------------------------------------------------------------------
 -- * Categories (Part 1)
@@ -354,33 +359,28 @@ instance FunctorOf (->) (Nat (->) (->)) p => Functor (Fix p) where
 -- T is terminal if for every object X in C there exists exactly one morphism X → T. 
 --------------------------------------------------------------------------------
 
-class Category' p => InitialObject (p :: i -> i -> *) (initial :: i) where
-  initialArrow :: Ob p x => p initial x
+class Category' p => InitialObject p a where
+  initialArrow  :: Ob p b => p a b
 
-class Category' p => TerminalObject (p :: i -> i -> *) (terminal :: i) where
-  terminalArrow :: Ob p x => p x terminal
-
+class Category' p => TerminalObject p a where
+  terminalArrow :: Ob p b => p b a
+  
 --------------------------------------------------------------------------------
 -- * Example: In the category Rel of sets and relations, the empty set is the 
 --   unique initial object, the unique terminal object, (and hence the unique 
 --   zero object.)
 --------------------------------------------------------------------------------
+-- The category of sets and relations
+type Rel a = Set (a, a)
 
-instance Category' Rel where
-  type Ob Rel = Ob (->)
-  id = id
-  observe _ = Dict
-  (.) = (.)
-  unop = id
-  op = id
+-- Initial object instance for Rel
+instance Ord a => InitialObject (Rel a) () where
+  initialArrow = mempty
 
--- Initial and Terminal Object instances for Rel
+-- Terminal object instance for Rel
+instance Ord a => TerminalObject (Rel a) () where
+  terminalArrow = mempty
 
-instance InitialObject Rel () where
-  initialArrow _ = mempty
-
-instance TerminalObject Rel () where
-  terminalArrow _ = mempty
 
 --------------------------------------------------------------------------------
 -- Any partially ordered set (P, ≤) can be interpreted as a category: 
@@ -388,32 +388,22 @@ instance TerminalObject Rel () where
 -- if and only if x ≤ y. This category has an initial object if and only if 
 -- P has a least element; it has a terminal object if and only if P has a greatest element.
 --------------------------------------------------------------------------------
+data POSet a = POSet
 
-class PartialOrder p where
-  (<=) :: p -> p -> Bool
-
-instance PartialOrder Int where
-  (<=) = (<=)
-
--- Define your specific instances for partially ordered sets.
-
--- Partially Ordered Set Category instances
-
-instance Category' PartialOrder where
-  type Ob PartialOrder = Ob (->)
-  id = id
+instance Eq a => Category' (POSet a) where
+  type Ob (POSet a) = Ord a
+  id = POSet
   observe _ = Dict
-  (.) f g = \x -> g x && f x
-  unop = id
-  op = id
+  (.) _ _ = POSet
 
--- Initial and Terminal Object instances for PartialOrder
+-- Initial Object in the POSet category
+instance Ord a => InitialObject (POSet a) a where
+  initialArrow = POSet  -- The least element is the initial object
 
-instance PartialOrder p => InitialObject PartialOrder p where
-  initialArrow _ = error "No least element in the poset"
+-- Terminal Object in the POSet category
+instance Ord a => TerminalObject (POSet a) a where
+  terminalArrow = POSet  -- The greatest element is the terminal object
 
-instance PartialOrder p => TerminalObject PartialOrder p where
-  terminalArrow _ = error "No greatest element in the poset"
 
 --------------------------------------------------------------------------------
 -- In Ring, the category of rings with unity and unity-preserving morphisms,
@@ -421,65 +411,41 @@ instance PartialOrder p => TerminalObject PartialOrder p where
 -- of a single element 0 = 1 is a terminal object.
 --------------------------------------------------------------------------------
 
-class Ring r where
-  add :: r -> r -> r
-  mul :: r -> r -> r
+-- Category of Rings with Unity
+data Ring = Z | ZeroRing deriving (Show, Eq)
 
-instance Ring Integer where
-  add = (+)
-  mul = (*)
-
--- Define your specific instances for rings.
-
--- Ring Category instances
+-- Morphisms in the Ring category
+data RingMorphism = RingMorphism deriving (Show)
 
 instance Category' Ring where
-  type Ob Ring = Ob (->)
-  id = id
+  type Ob Ring = Eq
+  id = RingMorphism
   observe _ = Dict
-  (.) f g = \x -> g x `add` f x
-  unop = id
-  op = id
+  (.) _ _ = RingMorphism
+  unop _ = RingMorphism
+  op _ = RingMorphism
 
--- Initial and Terminal Object instances for Ring
+instance InitialObject Ring Ring where
+  initialArrow = Z
 
-instance Ring r => InitialObject Ring r where
-  initialArrow _ = 0
-
-instance Ring r => TerminalObject Ring r where
-  terminalArrow _ = 1
-
+instance TerminalObject Ring Ring where
+  terminalArrow = ZeroRing
 
 --------------------------------------------------------------------------------
 -- * Sum & Product
 -- --------------------------------------------------------------------------------
 
-class Category' p => Coproduct (p :: i -> i -> *) (a :: i) (b :: i) (c :: i) where
-  left :: p a c
-  right :: p b c
-  coproductArrow :: p c d -> p a d -> p b d -> p (CoproductOb a b) d
+class Category' p => Sum p a b where
+  leftInjection  :: p a (SumType p a b)
+  rightInjection :: p b (SumType p a b)
+  sumCase :: forall c. (p a c, p b c) => p (SumType p a b) c -> c
 
-type family CoproductOb (a :: i) (b :: i) :: i where
-  CoproductOb a b = a
+type family SumType (p :: i -> i -> *) (a :: i) (b :: i) :: i
 
--- Example instance for Coproduct in Ring category
 
-instance Coproduct Ring Integer Integer Integer where
-  left = id
-  right = id
-  coproductArrow f g h = f
+class Category' p => Product p a b where
+  pair :: Ob p c => p c a -> p c b -> p c (ProductType p a b)
+  leftProjection  :: Ob p c => p (ProductType p a b) a
+  rightProjection :: Ob p c => p (ProductType p a b) b
 
-class Category' p => Product (p :: i -> i -> *) (a :: i) (b :: i) (c :: i) where
-  fst :: p c a
-  snd :: p c b
-  productArrow :: p d a -> p d b -> p d c -> p d (ProductOb a b)
-
-type family ProductOb (a :: i) (b :: i) :: i where
-  ProductOb a b = a
-
--- Example instance for Product in Ring category
-
-instance Product Ring Integer Integer Integer where
-  fst = id
-  snd = id
-  productArrow f g h = f
+type family ProductType (p :: i -> i -> *) (a :: i) (b :: i) :: i
