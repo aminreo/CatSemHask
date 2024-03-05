@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, KindSignatures, PolyKinds, MultiParamTypeClasses, FunctionalDependencies, ConstraintKinds, NoImplicitPrelude, TypeFamilies, TypeOperators, FlexibleContexts, FlexibleInstances, UndecidableInstances, RankNTypes, GADTs, ScopedTypeVariables, DataKinds, DefaultSignatures, NoMonomorphismRestriction #-}
+{-# LANGUAGE CPP, KindSignatures, PolyKinds, MultiParamTypeClasses, FunctionalDependencies, ConstraintKinds, NoImplicitPrelude, TypeFamilies, TypeOperators, FlexibleContexts, FlexibleInstances, UndecidableInstances, RankNTypes, GADTs, ScopedTypeVariables, DataKinds, DefaultSignatures, NoMonomorphismRestriction, AllowAmbiguousTypes  #-}
 module Hask.Category
   (
   -- * Category
@@ -45,6 +45,11 @@ import Prelude (undefined)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Constraint (Dict(..), (:-)(Sub))
+import Data.Ord (Ord)
+import Data.Bool (Bool)
+import Data.Eq (Eq)
+import Data.Bool (Bool(True))
+
 
 --------------------------------------------------------------------------------
 -- * Categories (Part 1)
@@ -359,12 +364,21 @@ instance FunctorOf (->) (Nat (->) (->)) p => Functor (Fix p) where
 -- T is terminal if for every object X in C there exists exactly one morphism X → T. 
 --------------------------------------------------------------------------------
 
-class Category' p => InitialObject p a where
-  initialArrow  :: Ob p b => p a b
+class Category' p => InitialObject (p :: i -> i -> *) (initial :: i) where
+  initialArrow :: Ob p x => p initial x
 
-class Category' p => TerminalObject p a where
-  terminalArrow :: Ob p b => p b a
+class Category' p => TerminalObject (p :: i -> i -> *) (terminal :: i) where
+  terminalArrow :: Ob p x => p x terminal
+
+-- The initial object is a terminal object in the opposite category,
+instance (Category' p, InitialObject p initial) => TerminalObject (Op p) (Op initial) where
+  terminalArrow = Op initialArrow
   
+-- An object that is both initial and terminal is called zero object
+class (Category' p, InitialObject p zero, TerminalObject p zero) => ZeroObject (p :: i -> i -> *) (zero :: i) where
+  -- The presence of both initialArrow and terminalArrow is implicit in this class.
+  zeroObject :: p zero zero
+
 --------------------------------------------------------------------------------
 -- * Example: In the category Rel of sets and relations, the empty set is the 
 --   unique initial object, the unique terminal object, (and hence the unique 
@@ -381,6 +395,22 @@ instance Ord a => InitialObject (Rel a) () where
 instance Ord a => TerminalObject (Rel a) () where
   terminalArrow = mempty
 
+-- Test initial and terminal objects in the Rel category (sets and relations)
+testRelCategory :: IO ()
+testRelCategory = do
+  putStrLn "Testing Rel Category (Sets and Relations):"
+  
+  -- Test initial object (empty set)
+  let initialSet = initialArrow :: Rel ()
+  putStrLn $ "Initial Set: " ++ show initialSet
+  
+  -- Test terminal object (empty set)
+  let terminalSet = terminalArrow :: Rel ()
+  putStrLn $ "Terminal Set: " ++ show terminalSet
+  
+  -- Check if initial and terminal objects are indeed empty sets
+  putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
+  putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
 
 --------------------------------------------------------------------------------
 -- Any partially ordered set (P, ≤) can be interpreted as a category: 
@@ -404,13 +434,24 @@ instance Ord a => InitialObject (POSet a) a where
 instance Ord a => TerminalObject (POSet a) a where
   terminalArrow = POSet  -- The greatest element is the terminal object
 
+-- Test initial and terminal objects in the POSet category (partially ordered sets)
+testPOSetCategory :: IO ()
+testPOSetCategory = do
+  putStrLn "Testing POSet Category (Partially Ordered Sets):"
+  
+  -- Test initial object (least element)
+  let initialElement = initialArrow :: POSet Int
+  putStrLn $ "Initial Element: " ++ show initialElement
+  
+  -- Test terminal object (greatest element)
+  let terminalElement = terminalArrow :: POSet Int
+  putStrLn $ "Terminal Element: " ++ show terminalElement
 
 --------------------------------------------------------------------------------
 -- In Ring, the category of rings with unity and unity-preserving morphisms,
 -- the ring of integers Z is an initial object. The zero ring consisting only 
 -- of a single element 0 = 1 is a terminal object.
 --------------------------------------------------------------------------------
-
 -- Category of Rings with Unity
 data Ring = Z | ZeroRing deriving (Show, Eq)
 
@@ -431,10 +472,22 @@ instance InitialObject Ring Ring where
 instance TerminalObject Ring Ring where
   terminalArrow = ZeroRing
 
+testRingCategory :: IO ()
+testRingCategory = do
+  putStrLn "Testing Ring Category (Rings with Unity):"
+  
+  -- Test initial object (ring of integers)
+  let initialRing = initialArrow :: Ring
+  putStrLn $ "Initial Ring: " ++ show initialRing
+  
+  -- Test terminal object (zero ring)
+  let terminalRing = terminalArrow :: Ring
+  putStrLn $ "Terminal Ring: " ++ show terminalRing
+
 --------------------------------------------------------------------------------
 -- * Sum & Product
--- --------------------------------------------------------------------------------
-
+--------------------------------------------------------------------------------
+-- Sums (Coproducts)
 class Category' p => Sum p a b where
   leftInjection  :: p a (SumType p a b)
   rightInjection :: p b (SumType p a b)
@@ -442,10 +495,58 @@ class Category' p => Sum p a b where
 
 type family SumType (p :: i -> i -> *) (a :: i) (b :: i) :: i
 
-
+-- Products
 class Category' p => Product p a b where
   pair :: Ob p c => p c a -> p c b -> p c (ProductType p a b)
   leftProjection  :: Ob p c => p (ProductType p a b) a
   rightProjection :: Ob p c => p (ProductType p a b) b
 
 type family ProductType (p :: i -> i -> *) (a :: i) (b :: i) :: i
+
+--------------------------------------------------------------------------------
+-- * Example: Vector Spaces
+--------------------------------------------------------------------------------
+-- Define a type for vector spaces over a scalar field 'k'
+data VectorSpace k = VectorSpace
+
+-- Define linear transformations between vector spaces
+data LinearMap k a b = LinearMap
+
+-- Functor instance for VectorSpace
+instance Functor (VectorSpace k) where
+  type Dom (VectorSpace k) = (->)
+  type Cod (VectorSpace k) = (->)
+  fmap = undefined  -- No linear transformations for VectorSpace
+
+-- Initial object: The zero-dimensional vector space
+instance InitialObject (LinearMap k) Void where
+  initialArrow = undefined -- No linear transformations from the zero vector space
+
+-- Terminal object: The one-dimensional vector space
+instance TerminalObject (LinearMap k) () where
+  terminalArrow = undefined -- Unique linear transformation to the one-dimensional vector space
+
+-- Product of vector spaces
+instance Product (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
+  proj1 = undefined -- Projection map to the first factor space
+  proj2 = undefined -- Projection map to the second factor space
+  fstArrow = undefined -- Factorization property for product
+  sndArrow = undefined -- Factorization property for product
+
+-- Coproduct of vector spaces
+instance Coproduct (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
+  inlArrow = undefined -- Injection map from the first factor space
+  inrArrow = undefined -- Injection map from the second factor space
+  factorize = undefined -- Factorization property for coproduct
+
+--------------------------------------------------------------------------------
+-- * Main function to run the tests
+--------------------------------------------------------------------------------
+
+main :: IO ()
+main = do
+  testRelCategory
+  putStrLn ""
+  testPOSetCategory
+  putStrLn ""
+  testRingCategory
