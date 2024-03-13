@@ -36,19 +36,16 @@ module Hask.Category
 import Data.Constraint (Constraint, (:-)(Sub), Dict(..), (\\), Class(cls), (:=>)(ins))
 import qualified Data.Constraint as Constraint
 import Data.Proxy (Proxy(..))
-import Prelude (($), Either(..))
 import Data.Type.Equality
 import Data.Type.Bool 
 import Data.Void (Void, absurd)
-import Prelude (const)
-import Prelude (undefined)
+import Prelude (($), Either(..),const,undefined,IO, any, error, Show,show,Int,(==),minBound,(<=),Integer,length)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Constraint (Dict(..), (:-)(Sub))
-import Data.Ord (Ord)
-import Data.Bool (Bool)
+import Data.Ord (Ord,compare,Ordering(..))
 import Data.Eq (Eq)
-import Data.Bool (Bool(True))
+import Data.Bool (Bool,Bool(True),(&&))
+
 
 
 --------------------------------------------------------------------------------
@@ -370,10 +367,13 @@ class Category' p => InitialObject (p :: i -> i -> *) (initial :: i) where
 class Category' p => TerminalObject (p :: i -> i -> *) (terminal :: i) where
   terminalArrow :: Ob p x => p x terminal
 
--- The initial object is a terminal object in the opposite category,
-instance (Category' p, InitialObject p initial) => TerminalObject (Op p) (Op initial) where
-  terminalArrow = Op initialArrow
-  
+-- The initial object is a terminal object in the opposite category (and vice versa)
+instance (Category' p, Op p ~ Yoneda p, TerminalObject (Op p) initial) => InitialObject p initial where
+  initialArrow = unop terminalArrow
+
+instance (Category' p, Op p ~ Yoneda p, InitialObject (Op p) terminal) => TerminalObject p terminal where
+  terminalArrow = unop initialArrow
+
 -- An object that is both initial and terminal is called zero object
 class (Category' p, InitialObject p zero, TerminalObject p zero) => ZeroObject (p :: i -> i -> *) (zero :: i) where
   -- The presence of both initialArrow and terminalArrow is implicit in this class.
@@ -489,11 +489,11 @@ testRingCategory = do
 --------------------------------------------------------------------------------
 -- Sums (Coproducts)
 class Category' p => Sum p a b where
-  leftInjection  :: p a (SumType p a b)
-  rightInjection :: p b (SumType p a b)
-  sumCase :: forall c. (p a c, p b c) => p (SumType p a b) c -> c
+  leftInjection  :: Ob p c => p a (SumType p a b c)
+  rightInjection :: Ob p c => p b (SumType p a b c)
+  sumCase :: forall c. Ob p c => p (SumType p a b c) c
 
-type family SumType (p :: i -> i -> *) (a :: i) (b :: i) :: i
+type family SumType (p :: i -> i -> *) (a :: i) (b :: i) (c :: i) :: i
 
 -- Products
 class Category' p => Product p a b where
@@ -507,37 +507,64 @@ type family ProductType (p :: i -> i -> *) (a :: i) (b :: i) :: i
 -- * Example: Vector Spaces
 --------------------------------------------------------------------------------
 -- Define a type for vector spaces over a scalar field 'k'
-data VectorSpace k = VectorSpace
+data VectorSpace k a = VectorSpace
 
 -- Define linear transformations between vector spaces
-data LinearMap k a b = LinearMap
+data LinearMap k a b = LinearMap { linearMap :: a -> b }
 
 -- Functor instance for VectorSpace
 instance Functor (VectorSpace k) where
   type Dom (VectorSpace k) = (->)
   type Cod (VectorSpace k) = (->)
-  fmap = undefined  -- No linear transformations for VectorSpace
+  fmap _ = VectorSpace  -- Identity transformation for vector spaces
 
 -- Initial object: The zero-dimensional vector space
 instance InitialObject (LinearMap k) Void where
-  initialArrow = undefined -- No linear transformations from the zero vector space
+  initialArrow = LinearMap absurd  -- No linear transformations from the zero vector space
 
 -- Terminal object: The one-dimensional vector space
 instance TerminalObject (LinearMap k) () where
-  terminalArrow = undefined -- Unique linear transformation to the one-dimensional vector space
+  terminalArrow = LinearMap (\_ -> ())  -- Unique linear transformation to the one-dimensional vector space
 
 -- Product of vector spaces
 instance Product (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
-  proj1 = undefined -- Projection map to the first factor space
-  proj2 = undefined -- Projection map to the second factor space
-  fstArrow = undefined -- Factorization property for product
-  sndArrow = undefined -- Factorization property for product
+  pair f g = LinearMap (\x -> (linearMap f x, linearMap g x))  -- Linear transformation combining two vector spaces
+  leftProjection = LinearMap (\(x, _) -> x)  -- Projection map to the first factor space
+  rightProjection = LinearMap (\(_, y) -> y)  -- Projection map to the second factor space
 
 -- Coproduct of vector spaces
-instance Coproduct (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
-  inlArrow = undefined -- Injection map from the first factor space
-  inrArrow = undefined -- Injection map from the second factor space
-  factorize = undefined -- Factorization property for coproduct
+instance Sum (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
+  leftInjection = LinearMap Left  -- Injection map from the first factor space
+  rightInjection = LinearMap Right  -- Injection map from the second factor space
+  sumCase = LinearMap (either id id)  -- Unique linear transformation from the coproduct
+
+-- Test function to verify vector spaces and linear transformations
+testVS :: IO ()
+testVS = do
+    putStrLn "Testing Vector Spaces and Linear Maps"
+    putStrLn "------------------------------------"
+    putStrLn "1. Initial and Terminal Objects:"
+    putStrLn "   Initial object should have no linear transformations:"
+    putStrLn $ "   Initial Arrow for Void: " ++ show (linearMap initialArrow :: Void -> Int)
+    putStrLn "   Terminal object should have unique linear transformation to ()"
+    putStrLn $ "   Terminal Arrow for (): " ++ show (linearMap terminalArrow :: Int -> ())
+    putStrLn ""
+    putStrLn "2. Product and Coproduct:"
+    let v1 = VectorSpace :: VectorSpace Int Int
+        v2 = VectorSpace :: VectorSpace Int Int
+        p = pair v1 v2 :: LinearMap Int (Int, Int) (Int, Int)
+        (l1, l2) = (leftProjection :: LinearMap Int (Int, Int) Int, rightProjection :: LinearMap Int (Int, Int) Int)
+        (i1, i2) = (leftInjection :: LinearMap Int Int (Either Int Int), rightInjection :: LinearMap Int Int (Either Int Int))
+        (f, g) = (linearMap l1, linearMap l2)
+        (inl, inr) = (linearMap i1, linearMap i2)
+        (sumF, sumG) = (linearMap $ sumCase :: Either Int Int -> Int, linearMap $ sumCase :: Either Int Int -> Int)
+    putStrLn $ "   Pairing of Vector Spaces (2, 3): " ++ show (linearMap p (2, 3))
+    putStrLn $ "   Left Projection of (2, 3): " ++ show (f (2, 3))
+    putStrLn $ "   Right Projection of (2, 3): " ++ show (g (2, 3))
+    putStrLn $ "   Left Injection of 5: " ++ show (inl 5)
+    putStrLn $ "   Right Injection of 7: " ++ show (inr 7)
+    putStrLn $ "   Sum Case of Left 10: " ++ show (sumF (Left 10))
+    putStrLn $ "   Sum Case of Right 20: " ++ show (sumG (Right 20))
 
 --------------------------------------------------------------------------------
 -- * Main function to run the tests
@@ -550,3 +577,6 @@ main = do
   testPOSetCategory
   putStrLn ""
   testRingCategory
+  putStrLn ""
+  testVS
+
