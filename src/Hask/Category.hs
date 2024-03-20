@@ -39,13 +39,12 @@ import Data.Proxy (Proxy(..))
 import Data.Type.Equality
 import Data.Type.Bool 
 import Data.Void (Void, absurd)
-import Prelude (($), Either(..),const,undefined,IO, any, error, Show,show,Int,(==),minBound,(<=),Integer,length)
+import Prelude (maxBound,minBound,Bounded,(++),putStrLn,String,($), Either(..),const,undefined,IO, any, error, Show,show,Int,(==),minBound,(<=),Integer,length)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Ord (Ord,compare,Ordering(..))
 import Data.Eq (Eq)
 import Data.Bool (Bool,Bool(True),(&&))
-
 
 
 --------------------------------------------------------------------------------
@@ -384,33 +383,40 @@ class (Category' p, InitialObject p zero, TerminalObject p zero) => ZeroObject (
 --   unique initial object, the unique terminal object, (and hence the unique 
 --   zero object.)
 --------------------------------------------------------------------------------
--- The category of sets and relations
-type Rel a = Set (a, a)
 
+
+--define Rel category of sets and relations
+
+-- type family Rel 
+data Rel a b = Rel { rel :: Set (a, b) }
+
+instance Category' Rel where
+  type Ob Rel = Vacuous Rel
+  id = Rel Set.empty
+  (Rel r) . (Rel s) = undefined -- Rel (Set.fromList [ (x, z) | (x, y) <- Set.toList (rel s), (y', z) <- Set.toList (rel r), y == y' ])
+  observe _ = Dict
 -- Initial object instance for Rel
-instance Ord a => InitialObject (Rel a) () where
-  initialArrow = mempty
+instance InitialObject Rel () where
+  initialArrow = Rel Set.empty
 
--- Terminal object instance for Rel
-instance Ord a => TerminalObject (Rel a) () where
-  terminalArrow = mempty
-
--- Test initial and terminal objects in the Rel category (sets and relations)
+-- -- Terminal object instance for Rel
+instance TerminalObject Rel () where
+  terminalArrow = Rel Set.empty
 testRelCategory :: IO ()
 testRelCategory = do
   putStrLn "Testing Rel Category (Sets and Relations):"
   
   -- Test initial object (empty set)
-  let initialSet = initialArrow :: Rel ()
-  putStrLn $ "Initial Set: " ++ show initialSet
+  -- let initialSet = rel (initialArrow :: Rel ()) -- Extract the set from the initial arrow
+  -- putStrLn $ "Initial Set: " ++ show initialSet
   
-  -- Test terminal object (empty set)
-  let terminalSet = terminalArrow :: Rel ()
-  putStrLn $ "Terminal Set: " ++ show terminalSet
+  -- -- Test terminal object (empty set)
+  -- let terminalSet = rel (terminalArrow :: Rel ()) -- Extract the set from the terminal arrow
+  -- putStrLn $ "Terminal Set: " ++ show terminalSet
   
-  -- Check if initial and terminal objects are indeed empty sets
-  putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
-  putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
+  -- -- Check if initial and terminal objects are indeed empty sets
+  -- putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
+  -- putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
 
 --------------------------------------------------------------------------------
 -- Any partially ordered set (P, ≤) can be interpreted as a category: 
@@ -418,33 +424,33 @@ testRelCategory = do
 -- if and only if x ≤ y. This category has an initial object if and only if 
 -- P has a least element; it has a terminal object if and only if P has a greatest element.
 --------------------------------------------------------------------------------
-data POSet a = POSet
+-- define Poset category of partially ordered sets with signature i->i->*
+data Poset a b = Poset { poset :: Set (a, b) }
 
-instance Eq a => Category' (POSet a) where
-  type Ob (POSet a) = Ord a
-  id = POSet
-  observe _ = Dict
-  (.) _ _ = POSet
+-- Define the instance of Category' for the Poset category
+instance Category' Poset where
+  type Ob Poset  = Ord
+  id = Poset Set.empty -- Identity morphism, represented by an empty set
+  Poset s1 . Poset s2 = undefined --Poset (Set.fromList [ (x, y) | x <- Set.toList s1, y <- Set.toList s2, x <= y ])
+  observe _ = undefined -- Dict
 
--- Initial Object in the POSet category
-instance Ord a => InitialObject (POSet a) a where
-  initialArrow = POSet  -- The least element is the initial object
+-- Define the initial object instance for Poset (least element)
+instance (Bounded a, Ord a) => InitialObject Poset a where
+  initialArrow = Poset $ Set.fromList [(minBound, minBound)] -- Singleton set containing the least element
 
--- Terminal Object in the POSet category
-instance Ord a => TerminalObject (POSet a) a where
-  terminalArrow = POSet  -- The greatest element is the terminal object
-
--- Test initial and terminal objects in the POSet category (partially ordered sets)
-testPOSetCategory :: IO ()
-testPOSetCategory = do
-  putStrLn "Testing POSet Category (Partially Ordered Sets):"
+-- Define the terminal object instance for Poset (greatest element)
+instance (Bounded a, Ord a) => TerminalObject Poset a where
+  terminalArrow = Poset $ Set.fromList [(maxBound, maxBound)] -- Singleton set containing the greatest element
+testPosetCategory :: IO ()
+testPosetCategory = do
+  putStrLn "Testing Poset Category (Partially Ordered Sets):"
   
   -- Test initial object (least element)
-  let initialElement = initialArrow :: POSet Int
+  let initialElement = elements (initialArrow :: Poset Int)
   putStrLn $ "Initial Element: " ++ show initialElement
   
   -- Test terminal object (greatest element)
-  let terminalElement = terminalArrow :: POSet Int
+  let terminalElement = elements (terminalArrow :: Poset Int)
   putStrLn $ "Terminal Element: " ++ show terminalElement
 
 --------------------------------------------------------------------------------
@@ -566,9 +572,31 @@ testVS = do
     putStrLn $ "   Sum Case of Left 10: " ++ show (sumF (Left 10))
     putStrLn $ "   Sum Case of Right 20: " ++ show (sumG (Right 20))
 
---------------------------------------------------------------------------------
--- * Main function to run the tests
---------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------
+-- Limits: In category theory a limit of a diagram F:D→C in a category C is an object 
+-- limF of C equipped with morphisms to the objects F(d) for all d∈D, such that 
+-- everything in sight commutes. Moreover, the limit limF is the universal object
+-- with this property, i.e. the “most optimized solution” to the problem of finding
+-- such an object.
+--------------------------------------------------------------------------------------
+
+class Category' p => Cone (p :: i -> i -> *) (f :: i -> *) (l :: i) where
+  apex :: Ob p x => f x -> p x l
+
+class Category' p => Limit (p :: i -> i -> *) (f :: i -> *) (l :: i) where
+  limit :: Cone p f l => p l l
+
+-- The dual notions of limits and cones are colimits and co-cones.
+
+class Category' p => Cocone (p :: i -> i -> *) (f :: i -> *) (l :: i) where
+  vertex :: Ob p x => f x -> p l x
+
+class Category' p => Colimit (p :: i -> i -> *) (f :: i -> *) (l :: i) where
+  colimit :: Cocone p f l => p l l
+
+-- --------------------------------------------------------------------------------
+-- -- * Main function to run the tests
+-- --------------------------------------------------------------------------------
 
 main :: IO ()
 main = do
