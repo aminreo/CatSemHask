@@ -401,17 +401,17 @@ testRelCategory :: IO ()
 testRelCategory = do
   putStrLn "Testing Rel Category (Sets and Relations):"
   
-  --Test initial object (empty set)
-  let initialSet = rel (initialArrow ) -- Extract the set from the initial arrow
-  putStrLn $ "Initial Set: " ++ show initialSet
+  -- Test initial object (empty relation)
+  let initialRel = rel (initialArrow :: Rel () Int)
+  putStrLn $ "Initial Relation: " ++ show initialRel
   
-  -- Test terminal object (empty set)
-  let terminalSet = rel (terminalArrow )
-  putStrLn $ "Terminal Set: " ++ show terminalSet
+  -- Test terminal object (empty relation)
+  let terminalRel = rel (terminalArrow :: Rel Int ())
+  putStrLn $ "Terminal Relation: " ++ show terminalRel
   
-  -- Check if initial and terminal objects are indeed empty sets
-  putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
-  putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
+  -- Check if initial and terminal objects are indeed empty relations
+  putStrLn $ "Is Initial Relation empty? " ++ show (Set.null initialRel)
+  putStrLn $ "Is Terminal Relation empty? " ++ show (Set.null terminalRel)
 
 --------------------------------------------------------------------------------
 -- Any partially ordered set (P, ≤) can be interpreted as a category: 
