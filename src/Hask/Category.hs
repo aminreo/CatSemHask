@@ -383,40 +383,35 @@ class (Category' p, InitialObject p zero, TerminalObject p zero) => ZeroObject (
 --   unique initial object, the unique terminal object, (and hence the unique 
 --   zero object.)
 --------------------------------------------------------------------------------
-
-
---define Rel category of sets and relations
-
--- type family Rel 
 data Rel a b = Rel { rel :: Set (a, b) }
-
 instance Category' Rel where
   type Ob Rel = Vacuous Rel
   id = Rel Set.empty
-  (Rel r) . (Rel s) = undefined -- Rel (Set.fromList [ (x, z) | (x, y) <- Set.toList (rel s), (y', z) <- Set.toList (rel r), y == y' ])
+  (Rel r) . (Rel s) = Rel (Set.fromList [ (x, z) | (x, y) <- Set.toList (rel s), (y', z) <- Set.toList (rel r), y == y' ])
   observe _ = Dict
+
 -- Initial object instance for Rel
 instance InitialObject Rel () where
   initialArrow = Rel Set.empty
-
--- -- Terminal object instance for Rel
+-- Terminal object instance for Rel
 instance TerminalObject Rel () where
   terminalArrow = Rel Set.empty
+
 testRelCategory :: IO ()
 testRelCategory = do
   putStrLn "Testing Rel Category (Sets and Relations):"
   
-  -- Test initial object (empty set)
-  -- let initialSet = rel (initialArrow :: Rel ()) -- Extract the set from the initial arrow
-  -- putStrLn $ "Initial Set: " ++ show initialSet
+  --Test initial object (empty set)
+  let initialSet = rel (initialArrow ) -- Extract the set from the initial arrow
+  putStrLn $ "Initial Set: " ++ show initialSet
   
-  -- -- Test terminal object (empty set)
-  -- let terminalSet = rel (terminalArrow :: Rel ()) -- Extract the set from the terminal arrow
-  -- putStrLn $ "Terminal Set: " ++ show terminalSet
+  -- Test terminal object (empty set)
+  let terminalSet = rel (terminalArrow )
+  putStrLn $ "Terminal Set: " ++ show terminalSet
   
-  -- -- Check if initial and terminal objects are indeed empty sets
-  -- putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
-  -- putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
+  -- Check if initial and terminal objects are indeed empty sets
+  putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
+  putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
 
 --------------------------------------------------------------------------------
 -- Any partially ordered set (P, ≤) can be interpreted as a category: 
@@ -424,72 +419,102 @@ testRelCategory = do
 -- if and only if x ≤ y. This category has an initial object if and only if 
 -- P has a least element; it has a terminal object if and only if P has a greatest element.
 --------------------------------------------------------------------------------
--- define Poset category of partially ordered sets with signature i->i->*
 data Poset a b = Poset { poset :: Set (a, b) }
 
--- Define the instance of Category' for the Poset category
 instance Category' Poset where
-  type Ob Poset  = Ord
-  id = Poset Set.empty -- Identity morphism, represented by an empty set
-  Poset s1 . Poset s2 = undefined --Poset (Set.fromList [ (x, y) | x <- Set.toList s1, y <- Set.toList s2, x <= y ])
-  observe _ = undefined -- Dict
+  type Ob Poset = Ord
+  id = Poset Set.empty
+  Poset s1 . Poset s2 = Poset (Set.fromList [ (x, y) | x <- Set.toList s1, y <- Set.toList s2, x <= y ])
+  observe _ = Dict
 
--- Define the initial object instance for Poset (least element)
-instance (Bounded a, Ord a) => InitialObject Poset a where
-  initialArrow = Poset $ Set.fromList [(minBound, minBound)] -- Singleton set containing the least element
+-- Define the initial object for Poset
+instance InitialObject Poset Int where
+  initialArrow = Poset Set.empty
 
--- Define the terminal object instance for Poset (greatest element)
-instance (Bounded a, Ord a) => TerminalObject Poset a where
-  terminalArrow = Poset $ Set.fromList [(maxBound, maxBound)] -- Singleton set containing the greatest element
+-- Define the terminal object for Poset 
+instance TerminalObject Poset Int where
+  terminalArrow = Poset Set.empty
+
 testPosetCategory :: IO ()
 testPosetCategory = do
   putStrLn "Testing Poset Category (Partially Ordered Sets):"
   
-  -- Test initial object (least element)
-  let initialElement = elements (initialArrow :: Poset Int)
-  putStrLn $ "Initial Element: " ++ show initialElement
+  -- Test initial object (empty set)
+  let initialSet = poset (initialArrow :: Poset Int Int)
+  putStrLn $ "Initial Set: " ++ show initialSet
   
-  -- Test terminal object (greatest element)
-  let terminalElement = elements (terminalArrow :: Poset Int)
-  putStrLn $ "Terminal Element: " ++ show terminalElement
-
+  -- Test terminal object (empty set)
+  let terminalSet = poset (terminalArrow :: Poset Int Int)
+  putStrLn $ "Terminal Set: " ++ show terminalSet
+  
+  -- Check if initial and terminal objects are indeed empty sets
+  putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
+  putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
+  
 --------------------------------------------------------------------------------
 -- In Ring, the category of rings with unity and unity-preserving morphisms,
 -- the ring of integers Z is an initial object. The zero ring consisting only 
 -- of a single element 0 = 1 is a terminal object.
 --------------------------------------------------------------------------------
--- Category of Rings with Unity
-data Ring = Z | ZeroRing deriving (Show, Eq)
+class Ring a where
+  unity :: a
+  add :: a -> a -> a
+  mul :: a -> a -> a
+  neg :: a -> a
 
--- Morphisms in the Ring category
-data RingMorphism = RingMorphism deriving (Show)
+data Z = Z
 
-instance Category' Ring where
-  type Ob Ring = Eq
-  id = RingMorphism
+instance Ring Z where
+  unity = Z
+  add _ _ = Z
+  mul _ _ = Z
+  neg _ = Z
+
+data ZeroRing = ZeroRing
+
+instance Ring ZeroRing where
+  unity = ZeroRing
+  add _ _ = ZeroRing
+  mul _ _ = ZeroRing
+  neg _ = ZeroRing
+
+data RingMorphism a b = RingMorphism { ringMorphism :: a -> b }
+
+instance Category' RingMorphism where
+  type Ob RingMorphism = Ring
+  id = RingMorphism Prelude.id
+  RingMorphism g . RingMorphism f = RingMorphism (g Prelude.. f)
+  initial = RingMorphism (\_ -> Z)
+  terminal = RingMorphism (\_ -> ZeroRing)
   observe _ = Dict
-  (.) _ _ = RingMorphism
-  unop _ = RingMorphism
-  op _ = RingMorphism
 
-instance InitialObject Ring Ring where
+
+-- Define the initial object for Ring
+
+instance InitialObject Ring Z where
   initialArrow = Z
 
-instance TerminalObject Ring Ring where
+-- Define the terminal object for Ring
+
+instance TerminalObject Ring ZeroRing where
   terminalArrow = ZeroRing
 
 testRingCategory :: IO ()
 testRingCategory = do
-  putStrLn "Testing Ring Category (Rings with Unity):"
+  putStrLn "Testing Ring Category:"
   
-  -- Test initial object (ring of integers)
-  let initialRing = initialArrow :: Ring
+  -- Test initial object (Z)
+  let initialRing = initialArrow :: Z
   putStrLn $ "Initial Ring: " ++ show initialRing
   
-  -- Test terminal object (zero ring)
-  let terminalRing = terminalArrow :: Ring
+  -- Test terminal object (ZeroRing)
+  let terminalRing = terminalArrow :: ZeroRing
   putStrLn $ "Terminal Ring: " ++ show terminalRing
-
+  
+  -- Check if initial and terminal objects are indeed initial and terminal rings
+  putStrLn $ "Is Initial Ring Z? " ++ show (initialRing == Z)
+  putStrLn $ "Is Terminal Ring ZeroRing? " ++ show (terminalRing == ZeroRing)
+  
 --------------------------------------------------------------------------------
 -- * Sum & Product
 --------------------------------------------------------------------------------
@@ -510,7 +535,13 @@ class Category' p => Product p a b where
 type family ProductType (p :: i -> i -> *) (a :: i) (b :: i) :: i
 
 --------------------------------------------------------------------------------
--- * Example: Vector Spaces
+-- * Example: A vector space is a set whose elements, often called vectors, may 
+-- be added together and multiplied by numbers called scalars. Scalars are often 
+-- real numbers, but can be complex numbers or, more generally, elements of any 
+-- field. The operations of vector addition and scalar multiplication must satisfy
+-- certain requirements, called vector axioms. Real vector space and complex 
+-- vector space are kinds of vector spaces based on different kinds of scalars: 
+-- real coordinate space or complex coordinate space. 
 --------------------------------------------------------------------------------
 -- Define a type for vector spaces over a scalar field 'k'
 data VectorSpace k a = VectorSpace
@@ -545,8 +576,8 @@ instance Sum (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
   sumCase = LinearMap (either id id)  -- Unique linear transformation from the coproduct
 
 -- Test function to verify vector spaces and linear transformations
-testVS :: IO ()
-testVS = do
+testVectorSpaceCategory :: IO ()
+testVectorSpaceCategory = do
     putStrLn "Testing Vector Spaces and Linear Maps"
     putStrLn "------------------------------------"
     putStrLn "1. Initial and Terminal Objects:"
@@ -601,10 +632,8 @@ class Category' p => Colimit (p :: i -> i -> *) (f :: i -> *) (l :: i) where
 main :: IO ()
 main = do
   testRelCategory
-  putStrLn ""
-  testPOSetCategory
-  putStrLn ""
+  testPosetCategory
   testRingCategory
-  putStrLn ""
-  testVS
+  testVectorSpaceCategory
+  putStrLn "All tests passed successfully!"
 
