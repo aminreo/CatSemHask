@@ -40,6 +40,7 @@ import Data.Type.Equality
 import Data.Type.Bool 
 import Data.Void (Void, absurd)
 import Prelude (maxBound,minBound,Bounded,(++),putStrLn,String,($), Either(..),const,undefined,IO, any, error, Show,show,Int,(==),minBound,(<=),Integer,length)
+import qualified Prelude ((.),id)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Ord (Ord,compare,Ordering(..))
@@ -387,7 +388,7 @@ data Rel a b = Rel { rel :: Set (a, b) }
 instance Category' Rel where
   type Ob Rel = Vacuous Rel
   id = Rel Set.empty
-  (Rel r) . (Rel s) = Rel (Set.fromList [ (x, z) | (x, y) <- Set.toList (rel s), (y', z) <- Set.toList (rel r), y == y' ])
+  (Rel r) . (Rel s) = undefined-- Rel (Set.fromList [ (x, z) | (x, y) <- Set.toList (rel s), (y', z) <- Set.toList (rel r), y == y' ])
   observe _ = Dict
 
 -- Initial object instance for Rel
@@ -424,7 +425,7 @@ data Poset a b = Poset { poset :: Set (a, b) }
 instance Category' Poset where
   type Ob Poset = Ord
   id = Poset Set.empty
-  Poset s1 . Poset s2 = Poset (Set.fromList [ (x, y) | x <- Set.toList s1, y <- Set.toList s2, x <= y ])
+  Poset s1 . Poset s2 = undefined -- Poset (Set.fromList [ (x, y) | x <- Set.toList s1, y <- Set.toList s2, x <= y ])
   observe _ = Dict
 
 -- Define the initial object for Poset
@@ -439,7 +440,7 @@ testPosetCategory :: IO ()
 testPosetCategory = do
   putStrLn "Testing Poset Category (Partially Ordered Sets):"
   
-  -- Test initial object (empty set)
+  Test initial object (empty set)
   let initialSet = poset (initialArrow :: Poset Int Int)
   putStrLn $ "Initial Set: " ++ show initialSet
   
@@ -484,18 +485,14 @@ instance Category' RingMorphism where
   type Ob RingMorphism = Ring
   id = RingMorphism Prelude.id
   RingMorphism g . RingMorphism f = RingMorphism (g Prelude.. f)
-  initial = RingMorphism (\_ -> Z)
-  terminal = RingMorphism (\_ -> ZeroRing)
   observe _ = Dict
 
 
 -- Define the initial object for Ring
-
 instance InitialObject Ring Z where
   initialArrow = Z
 
 -- Define the terminal object for Ring
-
 instance TerminalObject Ring ZeroRing where
   terminalArrow = ZeroRing
 
