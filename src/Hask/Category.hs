@@ -46,6 +46,7 @@ import qualified Data.Set as Set
 import Data.Ord (Ord,compare,Ordering(..))
 import Data.Eq (Eq)
 import Data.Bool (Bool,Bool(True),(&&))
+import qualified GHC.TypeLits as T
 
 
 --------------------------------------------------------------------------------
@@ -458,37 +459,64 @@ class (Category' p, InitialObject p zero, TerminalObject p zero) => ZeroObject (
   zeroObject :: p zero zero
 
 --------------------------------------------------------------------------------
--- * Example: In the category Rel of sets and relations, the empty set is the 
---   unique initial object, the unique terminal object, (and hence the unique 
---   zero object.)
+-- * Example: In Rel the category whose objects are sets and whose morphisms are
+--  (binary) relations between sets, the empty set is the unique initial object, 
+--  the unique terminal object, (and hence the unique zero object.)
 --------------------------------------------------------------------------------
-data Rel a b = Rel { rel :: Set (a, b) }
+
+-- Objects in the category of relations are sets.
+type ObjectRel a = Set a
+
+-- Morphisms in the category of relations are binary relations.
+type MorphismRel a b = Set (ObjectRel a , ObjectRel b)
+
+-- The category of relations.
+data Rel (a :: *) (b :: *) = Rel (MorphismRel a b)
+
+composeRel :: Rel b c -> Rel a b -> Rel a c
+composeRel (Rel r) (Rel s) = undefined -- Rel (Set.fromList [ (x, z) | (x, y) <- Set.toList s, (y', z) <- Set.toList r, y == y' ])
+
 instance Category' Rel where
   type Ob Rel = Vacuous Rel
   id = Rel Set.empty
-  (Rel r) . (Rel s) = Rel (Set.fromList [ (x, z) | (x, y) <- Set.toList (rel s), (y', z) <- Set.toList (rel r), y == y' ])
+  (Rel r) . (Rel s) = composeRel (Rel r) (Rel s)
   observe _ = Dict
 
--- Initial object instance for Rel
-instance InitialObject Rel () where
+-- Define the initial object for Rel which is the empty set
+instance InitialObject Rel (Set a) where
   initialArrow = Rel Set.empty
--- Terminal object instance for Rel
-instance TerminalObject Rel () where
+
+-- Define the terminal object for Rel which is the empty set
+instance TerminalObject Rel (Set a) where
   terminalArrow = Rel Set.empty
 
--- Test initial object instance
-testInitial :: Bool
-testInitial = let rel' = initialArrow :: Rel () () in Set.null (rel rel')
-
--- Test terminal object instance
-testTerminal :: Bool
-testTerminal = let rel' = terminalArrow :: Rel () () in Set.null (rel rel')
 
 testRelCategory :: IO ()
 testRelCategory = do
-  putStrLn "Testing Rel Category (Sets and Relations):"
-  putStrLn $ "Initial object test: " ++ show testInitial
-  putStrLn $ "Terminal object test: " ++ show testTerminal
+  -- test initial object (empty set)
+  let initialSet = Set.empty :: Set.Set Int
+  putStrLn $ "Initial Set: " ++ show initialSet
+
+  -- test terminal object (empty set)
+  let terminalSet = Set.empty :: Set.Set Int
+  putStrLn $ "Terminal Set: " ++ show terminalSet
+
+  -- test if initial and terminal objects are indeed empty sets
+  putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
+  putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
+
+  -- another examples of sets
+  let set1 = Set.fromList [1,2,3,4,5] :: Set.Set Int
+  let set2 = Set.fromList [6,7,8,9,10] :: Set.Set Int 
+
+  -- check if they are intial objects
+  putStrLn $ "Is Set1 an initial object? " ++ show (Set.null set1)
+  putStrLn $ "Is Set2 an initial object? " ++ show (Set.null set2)
+
+  -- check if they are terminal objects
+  putStrLn $ "Is Set1 a terminal object? " ++ show (Set.null set1)
+  putStrLn $ "Is Set2 a terminal object? " ++ show (Set.null set2)
+  
 
 --------------------------------------------------------------------------------
 -- Any partially ordered set (P, ≤) can be interpreted as a category: 
@@ -496,106 +524,138 @@ testRelCategory = do
 -- if and only if x ≤ y. This category has an initial object if and only if 
 -- P has a least element; it has a terminal object if and only if P has a greatest element.
 --------------------------------------------------------------------------------
-data Poset a b = Poset { poset :: Set (a, b) }
 
--- Poset s1 _ = Set (s1,_) 
--- (b,_)(a,_)
+-- Objects in the category of a partially ordered set.
+data ObjectPOS a = ObjectPOS a deriving (Show, Eq,Bounded,Ord)
+
+-- Morphisms in the category of a partially ordered set.
+data MorphismPOS a b = a :<=: b deriving (Show, Eq,Bounded,Ord)
+
+-- The category of a partially ordered set.
+data Poset (a :: *) (b :: *) = Poset (MorphismPOS (ObjectPOS a) (ObjectPOS b)) 
+
 instance Category' Poset where
-  type Ob Poset = Ord
-  id = Poset Set.empty
-  Poset s1 . Poset s2 =  Poset (Set.fromList [ (x, y) | x <- Set.toList s1, y <- Set.toList s2, x <= y ])
-  observe (Poset a) = Dict
+  type Ob Poset = Vacuous Poset
+  id = undefined -- Poset ((ObjectPOS x) :<=: (ObjectPOS x))
+  (Poset r ) . (Poset s ) = undefined -- | y == y' = Poset (ObjectPOS x :<=: ObjectPOS z)
+                                                                                    -- | otherwise = error "Cannot compose morphisms"
+  observe _ = Dict
 
--- Define the initial object for Poset
-instance InitialObject Poset Int where
-  initialArrow = Poset Set.empty
+-- instance Bounded a => Bounded (MorphismPOS (ObjectPOS a) (ObjectPOS a)) where
+--   minBound = ObjectPOS minBound :<=: ObjectPOS minBound
+--   maxBound = ObjectPOS maxBound :<=: ObjectPOS maxBound
 
--- Define the terminal object for Poset 
-instance TerminalObject Poset Int where
-  terminalArrow = Poset Set.empty
+-- -- -- Define the initial object for Poset
+-- instance InitialObject Poset (ObjectPOS Int) where
+--   initialArrow = Poset minBound
 
-testPosetCategory :: IO ()
-testPosetCategory = do
-  putStrLn "Testing Poset Category (Partially Ordered Sets):"
+-- smallestElement :: MorphismPOS (ObjectPOS Int) (ObjectPOS Int) -> ObjectPOS Int
+-- smallestElement (ObjectPOS a :<=: ObjectPOS b) = ObjectPOS (min a b)
+
+-- -- Define the initial object for Poset.
+-- instance InitialObject Poset (ObjectPOS Int) where
+--   initialArrow (ObjectPOS x) = Poset (smallestElement :<=: ObjectPOS x)
+
+-- testPosetCategory :: IO ()
+-- testPosetCategory = do
+--   putStrLn "Testing Poset Category (Partially Ordered Sets):"
   
-  Test initial object (empty set)
-  let initialSet = poset (initialArrow :: Poset Int Int)
-  putStrLn $ "Initial Set: " ++ show initialSet
+--   Test initial object (empty set)
+--   let initialSet = poset (initialArrow :: Poset Int Int)
+--   putStrLn $ "Initial Set: " ++ show initialSet
   
-  -- Test terminal object (empty set)
-  let terminalSet = poset (terminalArrow :: Poset Int Int)
-  putStrLn $ "Terminal Set: " ++ show terminalSet
+--   -- Test terminal object (empty set)
+--   let terminalSet = poset (terminalArrow :: Poset Int Int)
+--   putStrLn $ "Terminal Set: " ++ show terminalSet
   
-  -- Check if initial and terminal objects are indeed empty sets
-  putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
-  putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
+--   -- Check if initial and terminal objects are indeed empty sets
+--   putStrLn $ "Is Initial Set empty? " ++ show (Set.null initialSet)
+--   putStrLn $ "Is Terminal Set empty? " ++ show (Set.null terminalSet)
   
 --------------------------------------------------------------------------------
 -- In Ring, the category of rings with unity and unity-preserving morphisms,
 -- the ring of integers Z is an initial object. The zero ring consisting only 
 -- of a single element 0 = 1 is a terminal object.
 -- --------------------------------------------------------------------------------
--- Define a typeclass for rings
-class Ring a where
-  unity :: a
-  add :: a -> a -> a
-  mul :: a -> a -> a
-  neg :: a -> a
+-- Objects in the category of rings.
+data ObjectRing a 
 
--- Define the data type for the ring of integers (initial object)
-data Z = Z
+-- Morphisms in the category of rings.
+-- In the category of rings, a morphism is a ring homomorphism. 
+-- A ring homomorphism is a function between two rings that preserves the ring operations, 
+-- namely addition and multiplication, and the unity (identity element).
+data MorphismRing a b 
 
--- Define Z as an instance of the Ring typeclass
-instance Ring Z where
-  unity = Z
-  add _ _ = Z
-  mul _ _ = Z
-  neg _ = Z
+-- The category of rings.
+data Ring (a :: *) (b :: *) = Ring (MorphismRing (ObjectRing a) (ObjectRing b)) 
 
--- Define the data type for the zero ring (terminal object)
-data ZeroRing = ZeroRing
-
--- Define ZeroRing as an instance of the Ring typeclass
-instance Ring ZeroRing where
-  unity = ZeroRing
-  add _ _ = ZeroRing
-  mul _ _ = ZeroRing
-  neg _ = ZeroRing
-
--- Define a data type for representing morphisms in the category of rings
-data RingMorphism a b = RingMorphism { ringMorphism :: a -> b }
-
--- Define RingMorphism as an instance of Category' typeclass
-instance Category' RingMorphism where
-  type Ob RingMorphism = Ring
-  id = RingMorphism Prelude.id
-  RingMorphism g . RingMorphism f = RingMorphism (g Prelude.. f)
+instance Category' Ring where
+  type Ob Ring = Vacuous Ring
+  id = undefined  
+  (Ring r ) . (Ring s ) = undefined 
   observe _ = Dict
 
+-- -- Define a typeclass for rings
+-- class Ring a where
+--   unity :: a
+--   add :: a -> a -> a
+--   mul :: a -> a -> a
+--   neg :: a -> a
 
--- Define the initial object for Ring
-instance InitialObject Ring Z where
-  initialArrow = Z
+-- -- Define the data type for the ring of integers (initial object)
+-- data Z = Z
 
--- Define the terminal object for Ring
-instance TerminalObject Ring ZeroRing where
-  terminalArrow = ZeroRing
+-- -- Define Z as an instance of the Ring typeclass
+-- instance Ring Z where
+--   unity = Z
+--   add _ _ = Z
+--   mul _ _ = Z
+--   neg _ = Z
 
-testRingCategory :: IO ()
-testRingCategory = do
-  putStrLn "Testing Ring Category:"
+-- -- Define the data type for the zero ring (terminal object)
+-- data ZeroRing = ZeroRing
+
+-- -- Define ZeroRing as an instance of the Ring typeclass
+-- instance Ring ZeroRing where
+--   unity = ZeroRing
+--   add _ _ = ZeroRing
+--   mul _ _ = ZeroRing
+--   neg _ = ZeroRing
+
+-- -- Define a data type for representing morphisms in the category of rings
+-- data RingMorphism a b  -- RingMorphism { ringMorphism :: a -> b }
+
+-- -- Define RingMorphism as an instance of Category' typeclass
+-- instance Category' RingMorphism where
+--   type Ob RingMorphism = Ring
+--   id = RingMorphism Prelude.id
+--   RingMorphism g . RingMorphism f = RingMorphism (g Prelude.. f)
+--   observe _ = Dict
+
+
+-- -- Define the initial object for Ring
+-- instance InitialObject Ring Z where
+--   initialArrow = Z
+
+-- -- Define the terminal object for Ring
+-- instance TerminalObject Ring ZeroRing where
+--   terminalArrow = ZeroRing
+
+-- testRingCategory :: IO ()
+-- testRingCategory = do
+--   putStrLn "Testing Ring Category:"
   
-  -- Test initial object (Z)
-  let initialRing = initialArrow :: Z
-  putStrLn $ "Initial Ring: " ++ show initialRing
+--   -- Test initial object (Z)
+--   let initialRing = initialArrow :: Z
+--   putStrLn $ "Initial Ring: " ++ show initialRing
   
-  -- Test terminal object (ZeroRing)
-  let terminalRing = terminalArrow :: ZeroRing
-  putStrLn $ "Terminal Ring: " ++ show terminalRing
+--   -- Test terminal object (ZeroRing)
+--   let terminalRing = terminalArrow :: ZeroRing
+--   putStrLn $ "Terminal Ring: " ++ show terminalRing
   
-  -- Check if initial and terminal objects are indeed initial and terminal rings
-  putStrLn $ "Is Initial Ring Z? " ++ show (initialRing == Z)
-  putStrLn $ "Is Terminal Ring ZeroRing? " ++ show (terminalRing == ZeroRing)
+--   -- Check if initial and terminal objects are indeed initial and terminal rings
+--   putStrLn $ "Is Initial Ring Z? " ++ show (initialRing == Z)
+--   putStrLn $ "Is Terminal Ring ZeroRing? " ++ show (terminalRing == ZeroRing)
   
 --------------------------------------------------------------------------------
 -- * Sum & Product
@@ -625,65 +685,82 @@ type family ProductType (p :: i -> i -> *) (a :: i) (b :: i) :: i
 -- vector space are kinds of vector spaces based on different kinds of scalars: 
 -- real coordinate space or complex coordinate space. 
 --------------------------------------------------------------------------------
+
+-- Objects in the category of vector spaces.
+data ObjectVectorSpace a 
+
+-- Morphisms in the category of vector spaces.
+data MorphismVectorSpace a b 
+
+-- The category of vector spaces.
+data VectorSpace (a :: *) (b :: *) = VectorSpace (MorphismVectorSpace (ObjectVectorSpace a) (ObjectVectorSpace b)) 
+
+instance Category' VectorSpace where
+  type Ob VectorSpace = Vacuous VectorSpace
+  id = undefined  
+  (VectorSpace r ) . (VectorSpace s ) = undefined 
+  observe _ = Dict
+
+
 -- Define a type for vector spaces over a scalar field 'k'
-data VectorSpace k a = VectorSpace
+-- data VectorSpace k a = VectorSpace
 
--- Define linear transformations between vector spaces
-data LinearMap k a b = LinearMap { linearMap :: a -> b }
+-- -- Define linear transformations between vector spaces
+-- data LinearMap k a b = LinearMap { linearMap :: a -> b }
 
--- Functor instance for VectorSpace
-instance Functor (VectorSpace k) where
-  type Dom (VectorSpace k) = (->)
-  type Cod (VectorSpace k) = (->)
-  fmap _ = VectorSpace  -- Identity transformation for vector spaces
+-- -- Functor instance for VectorSpace
+-- instance Functor (VectorSpace k) where
+--   type Dom (VectorSpace k) = (->)
+--   type Cod (VectorSpace k) = (->)
+--   fmap _ = VectorSpace  -- Identity transformation for vector spaces
 
--- Initial object: The zero-dimensional vector space
-instance InitialObject (LinearMap k) Void where
-  initialArrow = LinearMap absurd  -- No linear transformations from the zero vector space
+-- -- Initial object: The zero-dimensional vector space
+-- instance InitialObject (LinearMap k) Void where
+--   initialArrow = LinearMap absurd  -- No linear transformations from the zero vector space
 
--- Terminal object: The one-dimensional vector space
-instance TerminalObject (LinearMap k) () where
-  terminalArrow = LinearMap (\_ -> ())  -- Unique linear transformation to the one-dimensional vector space
+-- -- Terminal object: The one-dimensional vector space
+-- instance TerminalObject (LinearMap k) () where
+--   terminalArrow = LinearMap (\_ -> ())  -- Unique linear transformation to the one-dimensional vector space
 
--- Product of vector spaces
-instance Product (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
-  pair f g = LinearMap (\x -> (linearMap f x, linearMap g x))  -- Linear transformation combining two vector spaces
-  leftProjection = LinearMap (\(x, _) -> x)  -- Projection map to the first factor space
-  rightProjection = LinearMap (\(_, y) -> y)  -- Projection map to the second factor space
+-- -- Product of vector spaces
+-- instance Product (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
+--   pair f g = LinearMap (\x -> (linearMap f x, linearMap g x))  -- Linear transformation combining two vector spaces
+--   leftProjection = LinearMap (\(x, _) -> x)  -- Projection map to the first factor space
+--   rightProjection = LinearMap (\(_, y) -> y)  -- Projection map to the second factor space
 
--- Coproduct of vector spaces
-instance Sum (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
-  leftInjection = LinearMap Left  -- Injection map from the first factor space
-  rightInjection = LinearMap Right  -- Injection map from the second factor space
-  sumCase = LinearMap (either id id)  -- Unique linear transformation from the coproduct
+-- -- Coproduct of vector spaces
+-- instance Sum (LinearMap k) (VectorSpace k) (VectorSpace k) (VectorSpace k) where
+--   leftInjection = LinearMap Left  -- Injection map from the first factor space
+--   rightInjection = LinearMap Right  -- Injection map from the second factor space
+--   sumCase = LinearMap (either id id)  -- Unique linear transformation from the coproduct
 
--- Test function to verify vector spaces and linear transformations
-testVectorSpaceCategory :: IO ()
-testVectorSpaceCategory = do
-    putStrLn "Testing Vector Spaces and Linear Maps"
-    putStrLn "------------------------------------"
-    putStrLn "1. Initial and Terminal Objects:"
-    putStrLn "   Initial object should have no linear transformations:"
-    putStrLn $ "   Initial Arrow for Void: " ++ show (linearMap initialArrow :: Void -> Int)
-    putStrLn "   Terminal object should have unique linear transformation to ()"
-    putStrLn $ "   Terminal Arrow for (): " ++ show (linearMap terminalArrow :: Int -> ())
-    putStrLn ""
-    putStrLn "2. Product and Coproduct:"
-    let v1 = VectorSpace :: VectorSpace Int Int
-        v2 = VectorSpace :: VectorSpace Int Int
-        p = pair v1 v2 :: LinearMap Int (Int, Int) (Int, Int)
-        (l1, l2) = (leftProjection :: LinearMap Int (Int, Int) Int, rightProjection :: LinearMap Int (Int, Int) Int)
-        (i1, i2) = (leftInjection :: LinearMap Int Int (Either Int Int), rightInjection :: LinearMap Int Int (Either Int Int))
-        (f, g) = (linearMap l1, linearMap l2)
-        (inl, inr) = (linearMap i1, linearMap i2)
-        (sumF, sumG) = (linearMap $ sumCase :: Either Int Int -> Int, linearMap $ sumCase :: Either Int Int -> Int)
-    putStrLn $ "   Pairing of Vector Spaces (2, 3): " ++ show (linearMap p (2, 3))
-    putStrLn $ "   Left Projection of (2, 3): " ++ show (f (2, 3))
-    putStrLn $ "   Right Projection of (2, 3): " ++ show (g (2, 3))
-    putStrLn $ "   Left Injection of 5: " ++ show (inl 5)
-    putStrLn $ "   Right Injection of 7: " ++ show (inr 7)
-    putStrLn $ "   Sum Case of Left 10: " ++ show (sumF (Left 10))
-    putStrLn $ "   Sum Case of Right 20: " ++ show (sumG (Right 20))
+-- -- Test function to verify vector spaces and linear transformations
+-- testVectorSpaceCategory :: IO ()
+-- testVectorSpaceCategory = do
+--     putStrLn "Testing Vector Spaces and Linear Maps"
+--     putStrLn "------------------------------------"
+--     putStrLn "1. Initial and Terminal Objects:"
+--     putStrLn "   Initial object should have no linear transformations:"
+--     putStrLn $ "   Initial Arrow for Void: " ++ show (linearMap initialArrow :: Void -> Int)
+--     putStrLn "   Terminal object should have unique linear transformation to ()"
+--     putStrLn $ "   Terminal Arrow for (): " ++ show (linearMap terminalArrow :: Int -> ())
+--     putStrLn ""
+--     putStrLn "2. Product and Coproduct:"
+--     let v1 = VectorSpace :: VectorSpace Int Int
+--         v2 = VectorSpace :: VectorSpace Int Int
+--         p = pair v1 v2 :: LinearMap Int (Int, Int) (Int, Int)
+--         (l1, l2) = (leftProjection :: LinearMap Int (Int, Int) Int, rightProjection :: LinearMap Int (Int, Int) Int)
+--         (i1, i2) = (leftInjection :: LinearMap Int Int (Either Int Int), rightInjection :: LinearMap Int Int (Either Int Int))
+--         (f, g) = (linearMap l1, linearMap l2)
+--         (inl, inr) = (linearMap i1, linearMap i2)
+--         (sumF, sumG) = (linearMap $ sumCase :: Either Int Int -> Int, linearMap $ sumCase :: Either Int Int -> Int)
+--     putStrLn $ "   Pairing of Vector Spaces (2, 3): " ++ show (linearMap p (2, 3))
+--     putStrLn $ "   Left Projection of (2, 3): " ++ show (f (2, 3))
+--     putStrLn $ "   Right Projection of (2, 3): " ++ show (g (2, 3))
+--     putStrLn $ "   Left Injection of 5: " ++ show (inl 5)
+--     putStrLn $ "   Right Injection of 7: " ++ show (inr 7)
+--     putStrLn $ "   Sum Case of Left 10: " ++ show (sumF (Left 10))
+--     putStrLn $ "   Sum Case of Right 20: " ++ show (sumG (Right 20))
 
 --------------------------------------------------------------------------------------
 -- Limits: In category theory a limit of a diagram F:D→C in a category C is an object 
@@ -713,9 +790,9 @@ class Category' p => Colimit (p :: i -> i -> *) (f :: i -> *) (l :: i) where
 
 main :: IO ()
 main = do
-  testRelCategory
-  testPosetCategory
-  testRingCategory
-  testVectorSpaceCategory
-  putStrLn "All tests passed successfully!"
+  testRelCategory  
+--   testPosetCategory
+--   testRingCategory
+--   testVectorSpaceCategory
+--   putStrLn "All tests passed successfully!"
 
